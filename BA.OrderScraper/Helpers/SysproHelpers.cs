@@ -178,23 +178,16 @@ namespace BA.OrderScraper.Helpers
 
                     #region Order Items Creation
                     int scrollDown = 28;
-                    var loopCount = 0;
+                    var loopCount = startingItemRow;
                     //after each item, move the scrollbar down by 28 pixels (this is the height of each row item)
                     for (var i = startingItemRow; i < sysproOrder.Items.Count; i++)
                     {
                         Actions actions = new Actions(webDriver);
                         wait.Timeout = TimeSpan.FromSeconds(20);
                         jsExecutor.ExecuteScript("document.getElementById('gridtoolbar.newrow').click()");
-                        //await Task.Delay(4000);
-                        //wait for the new row to be added
                         WaitForNewRowToBeAdded(wait, jsExecutor, i);
-                        await Task.Delay(3000);
+                        await Task.Delay(1500);
                         actions.SendKeys(Keys.Tab).Perform();
-                        //find input in fifth td
-                        //var td5 = row.FindElements(By.TagName("td"))[4];
-                        //td5.Click();
-                        //////WaitUntilElementStale(wait, td5, 5);
-                        await Task.Delay(1000);
                         UpdateItemsRows(webDriver, i, out row, out rowGroup);
 
                         IWebElement td5;
@@ -207,7 +200,7 @@ namespace BA.OrderScraper.Helpers
                                 td5 = row.FindElements(By.TagName("td"))[4];
                                 break;
                             }
-                            catch (NoSuchElementException)
+                            catch (Exception ex) when (ex is NoSuchElementException || ex is StaleElementReferenceException)
                             {
                                 await Task.Delay(500);
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
@@ -269,7 +262,6 @@ namespace BA.OrderScraper.Helpers
                             }
                         }
 
-                        await Task.Delay(1000);
                         UpdateItemsRows(webDriver, i, out row, out rowGroup);
                         var td6 = row.FindElements(By.TagName("td"))[5];
                         //actions.SendKeys(Keys.Tab).Perform();
@@ -285,31 +277,41 @@ namespace BA.OrderScraper.Helpers
                         {
                             try
                             {
+                                webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
                                 td6.FindElement(By.TagName("a")).Click();
                                 break;
                             }
-                            catch (StaleElementReferenceException staleElem)
+                            catch (StaleElementReferenceException)
                             {
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
                                 td6 = row.FindElements(By.TagName("td"))[5];
                                 await Task.Delay(500);
                             }
+                            catch (NoSuchElementException)
+                            {
+                                ClickTd(webDriver, i, 5);
+                                await Task.Delay(1000);
+                                UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                td6 = row.FindElements(By.TagName("td"))[5];
+                            }
                             catch
                             {
                                 throw;
                             };
+                            webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
                         }
                         //webDriver.FindElement(By.Id("Filter_AlternateKey1_InvMaster_0"));
                         WaitUntilElementVisible(wait, By.Id("Filter_AlternateKey1_InvMaster_0"), 5);
-                        await Task.Delay(1000);
+                        await Task.Delay(500);
                         jsExecutor.ExecuteScript($"document.getElementById('Filter_AlternateKey1_InvMaster_0').value = '{sysproOrder.Items[i].QuickReference}'");
+                        await Task.Delay(250);
                         jsExecutor.ExecuteScript(Consts.JavaScript.baseScript + " triggerElementChange(document.querySelector('#Filter_AlternateKey1_InvMaster_0'))");
 
-                        await Task.Delay(1000);
+                        await Task.Delay(500);
 
                         jsExecutor.ExecuteScript("document.querySelector('.avanti-search-button').click();");
 
-                        var checkTableRowsEndTime = DateTime.Now.AddSeconds(10);
+                        var checkTableRowsEndTime = DateTime.Now.AddSeconds(6);
                         bool isEmpty = false;
                         while (DateTime.Now < checkTableRowsEndTime)
                         {
@@ -350,7 +352,6 @@ namespace BA.OrderScraper.Helpers
                         }
                         else
                         {
-                            await Task.Delay(1500);
                             var tbody = webDriver.FindElement(By.Id("example"))
                                 .FindElement(By.ClassName("k-selectable"))
                                 .FindElement(By.TagName("tbody"));
@@ -371,15 +372,7 @@ namespace BA.OrderScraper.Helpers
                                     await Task.Delay(1000);
                                     break;
                                 }
-                                catch (StaleElementReferenceException)
-                                {
-                                    tbody = webDriver.FindElement(By.Id("example"))
-                                        .FindElement(By.ClassName("k-selectable"))
-                                        .FindElement(By.TagName("tbody"));
-                                    rows = tbody.FindElements(By.TagName("tr"));
-                                    clickItemSearchResultRetryCount++;
-                                }
-                                catch (ElementClickInterceptedException)
+                                catch(Exception ex) when (ex is StaleElementReferenceException || ex is ElementClickInterceptedException)
                                 {
                                     await Task.Delay(500);
                                     tbody = webDriver.FindElement(By.Id("example"))
