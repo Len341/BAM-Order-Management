@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BA.OrderScraper": {
+      "commandName": "Project",
+      "commandLineArgs": "sysproordercreate"
+    }
+  }
+}
