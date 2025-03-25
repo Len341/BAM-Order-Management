@@ -148,7 +148,8 @@ namespace BA.OrderScraper.Helpers
                         //webDriver.FindElement(By.CssSelector("#main_column_0 > div:nth-child(2) > div > h4 > i")).Click();
                         await Task.Delay(3000);
 
-                        await ClickElement(webDriver, By.Id("Fields.TOOLBAR:SORPOETB39000"));
+                        //await ClickElement(webDriver, By.Id("Fields.TOOLBAR:SORPOETB39000"));
+                        jsExecutor.ExecuteScript("document.getElementById('Fields.TOOLBAR:SORPOETB39000').click()");
 
                         await Task.Delay(2500);
                         orderNumberInput = webDriver.FindElement(By.Id("Toolbar.SORPOETB38002"));
@@ -185,6 +186,10 @@ namespace BA.OrderScraper.Helpers
                         Actions actions = new Actions(webDriver);
                         wait.Timeout = TimeSpan.FromSeconds(20);
                         jsExecutor.ExecuteScript("document.getElementById('gridtoolbar.newrow').click()");
+
+                        jsExecutor.ExecuteScript(@"if(document.querySelector('.material-icons.close-error-notification') != null){
+    document.querySelector('.material-icons.close-error-notification').click();}");
+
                         WaitForNewRowToBeAdded(wait, jsExecutor, i);
                         await Task.Delay(1500);
                         actions.SendKeys(Keys.Tab).Perform();
@@ -258,7 +263,7 @@ namespace BA.OrderScraper.Helpers
                                 td5 = row.FindElements(By.TagName("td"))[4];
                                 ClickTd(webDriver, i, 4);
                                 warehouseInput = td5.FindElement(By.TagName("input"));
-                                warehouseText = warehouseInput.GetAttribute("value");
+                                warehouseText = warehouseInput.GetAttribute("value"); //stale element reference exception here ?
                             }
                         }
 
@@ -384,10 +389,32 @@ namespace BA.OrderScraper.Helpers
                                 }
                             }
 
-                            wait.Timeout = TimeSpan.FromSeconds(10);
-                            wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementToBeClickable(rows[0]));
+                            var clickableItemSearchResultRetryCount = 0;
+                            while (true)
+                            {
 
-                            int clickItemSearchResultRetryCount = 0;
+                                try
+                                {
+                                    wait.Timeout = TimeSpan.FromSeconds(10);
+                                    wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementToBeClickable(rows[0]));
+                                    break;
+                                }
+                                catch (Exception ex)
+                                {
+                                    clickableItemSearchResultRetryCount++;
+                                    if (clickableItemSearchResultRetryCount > 10)
+                                    {
+                                        throw new Exception("The search result item row did not become clickable");
+                                    }
+                                    await Task.Delay(500);
+                                    tbody = webDriver.FindElement(By.Id("example"))
+                                        .FindElement(By.ClassName("k-selectable"))
+                                        .FindElement(By.TagName("tbody"));
+                                    rows = tbody.FindElements(By.TagName("tr"));
+                                }
+                            }
+
+                            var clickItemSearchResultRetryCount = 0;
                             while (true)
                             {
                                 try
@@ -589,7 +616,7 @@ namespace BA.OrderScraper.Helpers
                                 .FindElements(By.TagName("tr"));
 
                         ReadOnlyCollection<IWebElement> gridListCellNotes = null;
-                        await Task.Delay(2000);
+                        await Task.Delay(10000);
 
                         try
                         {
@@ -851,7 +878,7 @@ namespace BA.OrderScraper.Helpers
             //                var td = tableRow.querySelectorAll('td')[{tdIndex}];
             //                td.click();";
             //((IJavaScriptExecutor)webDriver).ExecuteScript(script);
-
+            Actions actions = new Actions(webDriver);
             var retryCount = 0;
             while (true)
             {
@@ -859,14 +886,31 @@ namespace BA.OrderScraper.Helpers
                 {
                     var tableRow = webDriver.FindElements(By.CssSelector("#main_column_0 table tbody tr:not(.k-footer-template)"))[rowIndex];
                     var td = tableRow.FindElements(By.TagName("td"))[tdIndex];
-                    td.Click();
+                    //td.Click();
+                    actions.MoveToElement(td).Click().Perform();
                     break;
                 }
                 catch (Exception ex)
                 {
+                    if (ex is ElementClickInterceptedException)
+                    {
+                        //check if there is no stock popup, and click save if there is
+                        try
+                        {
+                            //check for the 'insufficient stock' popup, for now we will just close by clicking the X
+                            //Toolbar.FORMSORPOEFE60000
+                            webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(4);
+                            var saveInsufficientStockPopupButton = webDriver.FindElement(By.Id("Toolbar.FORMSORPOEFE41000"));
+                            saveInsufficientStockPopupButton.Click();
+                        }
+                        catch (Exception)
+                        {
+                            //continue with work
+                        }
+                    }
                     retryCount++;
                     await Task.Delay(500);
-                    if (retryCount > 10) throw;
+                    if (retryCount > 20) throw;
                 }
             }
         }
