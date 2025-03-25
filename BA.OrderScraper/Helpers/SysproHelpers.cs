@@ -5,6 +5,7 @@ using BA.OrderScraper.Services;
 using BA.OrderScraper.Shared;
 using LinqKit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Update.Internal;
 using OfficeOpenXml.Drawing.Theme;
 using OpenQA.Selenium;
@@ -147,8 +148,7 @@ namespace BA.OrderScraper.Helpers
                         //webDriver.FindElement(By.CssSelector("#main_column_0 > div:nth-child(2) > div > h4 > i")).Click();
                         await Task.Delay(3000);
 
-
-                        webDriver.FindElement(By.Id("Fields.TOOLBAR:SORPOETB39000")).Click();
+                        await ClickElement(webDriver, By.Id("Fields.TOOLBAR:SORPOETB39000"));
 
                         await Task.Delay(2500);
                         orderNumberInput = webDriver.FindElement(By.Id("Toolbar.SORPOETB38002"));
@@ -271,28 +271,26 @@ namespace BA.OrderScraper.Helpers
                         await Task.Delay(loopCount == 0 ? 6000 : 1500);
                         //WaitUntilElementStale(wait, td6, 5);
                         UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                        td6 = row.FindElements(By.TagName("td"))[5];
                         if (loopCount == 0) ClickTd(webDriver, i, 5);
                         while (true)
                         {
                             try
                             {
                                 webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
+                                td6 = row.FindElements(By.TagName("td"))[5];
                                 td6.FindElement(By.TagName("a")).Click();
                                 break;
                             }
                             catch (StaleElementReferenceException)
                             {
-                                UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                                td6 = row.FindElements(By.TagName("td"))[5];
                                 await Task.Delay(500);
+                                UpdateItemsRows(webDriver, i, out row, out rowGroup);
                             }
                             catch (NoSuchElementException)
                             {
                                 ClickTd(webDriver, i, 5);
                                 await Task.Delay(1000);
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                                td6 = row.FindElements(By.TagName("td"))[5];
                             }
                             catch
                             {
@@ -357,8 +355,34 @@ namespace BA.OrderScraper.Helpers
                                 .FindElement(By.TagName("tbody"));
 
                             var rows = tbody.FindElements(By.TagName("tr"));
-                            var warehouse = rows[0].FindElements(By.TagName("td"))[1].GetAttribute("innerText");
-                            var itemDescription = rows[0].FindElements(By.TagName("td"))[3].GetAttribute("innerText").ToLower().Trim().Replace(" ", "");
+
+
+                            string warehouse = string.Empty;
+                            string itemDescription = string.Empty;
+
+                            int retryItemDetailsCount = 0;
+                            while (true)
+                            {
+                                try
+                                {
+                                    warehouse = rows[0].FindElements(By.TagName("td"))[1].GetAttribute("innerText");
+                                    itemDescription = rows[0].FindElements(By.TagName("td"))[3].GetAttribute("innerText").ToLower().Trim().Replace(" ", "");
+                                    break;
+                                }
+                                catch (Exception ex) when (ex is StaleElementReferenceException)
+                                {
+                                    await Task.Delay(500);
+                                    tbody = webDriver.FindElement(By.Id("example"))
+                                        .FindElement(By.ClassName("k-selectable"))
+                                        .FindElement(By.TagName("tbody"));
+                                    rows = tbody.FindElements(By.TagName("tr"));
+                                    retryItemDetailsCount++;
+                                    if (retryItemDetailsCount > 10)
+                                    {
+                                        throw;
+                                    }
+                                }
+                            }
 
                             wait.Timeout = TimeSpan.FromSeconds(10);
                             wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementToBeClickable(rows[0]));
@@ -372,7 +396,7 @@ namespace BA.OrderScraper.Helpers
                                     await Task.Delay(1000);
                                     break;
                                 }
-                                catch(Exception ex) when (ex is StaleElementReferenceException || ex is ElementClickInterceptedException)
+                                catch (Exception ex) when (ex is StaleElementReferenceException || ex is ElementClickInterceptedException)
                                 {
                                     await Task.Delay(500);
                                     tbody = webDriver.FindElement(By.Id("example"))
@@ -513,7 +537,25 @@ namespace BA.OrderScraper.Helpers
                     {
                         //only save the order if there are items in the order
                         //Save Order
-                        webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
+                        int retrySaveCount = 0;
+                        while (true)
+                        {
+                            try
+                            {
+                                webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
+                                break;
+                            }
+                            catch (Exception ex) when (ex is ElementClickInterceptedException)
+                            {
+                                await Task.Delay(500);
+                                retrySaveCount++;
+                                if (retrySaveCount > 10)
+                                {
+                                    throw;
+                                }
+                            }
+                        }
+
 
                         for (var i = 0; i < contractExpiredPopupCount; i++)
                         {
@@ -670,6 +712,25 @@ namespace BA.OrderScraper.Helpers
                 await Task.Delay(1000);
 
                 #endregion
+            }
+        }
+
+        private static async Task ClickElement(IWebDriver? webDriver, By by)
+        {
+            int retryCount = 0;
+            while (true)
+            {
+                try
+                {
+                    webDriver.FindElement(by).Click();
+                    break;
+                }
+                catch (Exception ex) when (ex is ElementClickInterceptedException)
+                {
+                    retryCount++;
+                    await Task.Delay(500);
+                    if (retryCount > 10) throw;
+                }
             }
         }
 
