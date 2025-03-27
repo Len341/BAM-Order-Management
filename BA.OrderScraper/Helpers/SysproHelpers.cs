@@ -154,10 +154,18 @@ namespace BA.OrderScraper.Helpers
                         await Task.Delay(2500);
                         orderNumberInput = webDriver.FindElement(By.Id("Toolbar.SORPOETB38002"));
                         orderNumber = orderNumberInput.GetAttribute("value");
-                        if (string.IsNullOrEmpty(orderNumber))
+                        int orderNumberRetryCount = 0;
+                        while (string.IsNullOrEmpty(orderNumber))
                         {
+                            if (orderNumberRetryCount > 5)
+                            {
+                                throw new Exception("Could not get order number");
+                            }
                             //we should get the order number from the order number input
+                            jsExecutor.ExecuteScript("document.getElementById('Fields.TOOLBAR:SORPOETB39000').click()");
+                            await Task.Delay(3000);
                             orderNumber = jsExecutor.ExecuteScript("return document.getElementById('Toolbar.SORPOETB38002').value").ToString();
+                            orderNumberRetryCount++;
                         }
 
                         orderInProgress = await sysproOrderCreationHistoryAppService
