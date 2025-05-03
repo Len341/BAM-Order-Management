@@ -55,7 +55,7 @@ namespace BA.OrderScraper.Services
                             Quantity = itemsByPartNo.Count(),
                             QuickReference = itemsByPartNo.Key
                         });
-                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.ShipDate;
+                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.SupplierArrivalDateParsed;
                         order.ShipVia = itemsByPartNo.FirstOrDefault()!.PickupRoute;
                     });
 
@@ -117,7 +117,7 @@ namespace BA.OrderScraper.Services
                             Quantity = itemsByPartNo.Count(),
                             QuickReference = itemsByPartNo.Key
                         });
-                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.ShipDate;
+                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.SupplierArrivalDateParsed;
                         order.ShipVia = itemsByPartNo.FirstOrDefault()!.PickupRoute;
                     });
 
@@ -161,7 +161,7 @@ namespace BA.OrderScraper.Services
                             Quantity = itemsByPartNo.Count(),
                             QuickReference = itemsByPartNo.Key
                         });
-                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.ShipDate;
+                        order.ShipDate = itemsByPartNo.FirstOrDefault()!.SupplierArrivalDateParsed;
                         order.ShipVia = itemsByPartNo.FirstOrDefault()!.PickupRoute;
                     });
 
