@@ -31,6 +31,7 @@ namespace BA.OrderScraper.Helpers
         public static async Task CreateSysproOrders(IWebDriver? webDriver)
         {
             var currentOrder = new SysproOrderItem();
+            SysproOrderCreationHistory orderInProgress = null;
             try
             {
                 int contractExpiredPopupCount = 0;
@@ -52,7 +53,9 @@ namespace BA.OrderScraper.Helpers
                 ReadOnlyCollection<IWebElement> rowGroup = new ReadOnlyCollection<IWebElement>(new List<IWebElement>());
 
                 //check for in progress orders
-                var inProgressOrders = await sysproOrderCreationHistoryAppService.GetSysproOrderCreationHistoryAsync(inProgress: true);
+                var inProgressOrders = (await sysproOrderCreationHistoryAppService
+                    .GetSysproOrderCreationHistoryAsync(inProgress: true))
+                    .Take(5);
                 if (inProgressOrders != null && inProgressOrders.Any())
                 {
                     foreach (var inProgressOrder in inProgressOrders)
@@ -62,7 +65,7 @@ namespace BA.OrderScraper.Helpers
                         orderItems.Add(order);
                     }
                 }
-                orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(100));
+                orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(5));
 
                 foreach (var sysproOrder in orderItems)
                 {
@@ -72,7 +75,7 @@ namespace BA.OrderScraper.Helpers
                     var windowHandles = webDriver.WindowHandles;
                     webDriver.SwitchTo().Window(windowHandles.LastOrDefault());
 
-                    SysproOrderCreationHistory orderInProgress = new SysproOrderCreationHistory();
+                    orderInProgress = new SysproOrderCreationHistory();
                     string orderNumber = "";
                     int startingItemRow = 0;
                     if (sysproOrder.InProgress)
@@ -623,49 +626,7 @@ namespace BA.OrderScraper.Helpers
                                 .FindElement(By.XPath("//*[@id=\"main_column_0\"]/div[2]/div/div/div/div[2]/div/div[3]/div[1]/table/tbody"))
                                 .FindElements(By.TagName("tr"));
 
-                        ReadOnlyCollection<IWebElement> gridListCellNotes = null;
-                        await Task.Delay(10000);
-
-                        try
-                        {
-                            webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(4);
-                            gridListCellNotes = webDriver.FindElements(By.ClassName("gridlist-cell-note"));
-                        }
-                        catch (NotFoundException notFound)
-                        {
-                            //continue with work
-                        }
-                        if (gridListCellNotes?.Count > 0)
-                        {
-                            //means we potentially have an issue, get the message and log it instead
-                            //use data-content attribute
-                            var errorMessage = gridListCellNotes![0].GetAttribute("data-content");
-
-                            orderInProgress.UpdatedDate = DateTime.Now;
-                            orderInProgress.InProgress = false;
-                            orderInProgress.ErrorMessage = errorMessage;
-
-                            await sysproOrderCreationHistoryAppService
-                                .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
-
-                            //remove all rows so that we can create the next order
-                            for (var i = 0; i < rowGroup.Count; i++)
-                            {
-                                UpdateItemsRows(webDriver, 0, out row, out rowGroup);
-                                row.FindElements(By.TagName("td"))[0].FindElement(By.TagName("a")).Click();
-                                await Task.Delay(500);
-                            }
-                        }
-                        else
-                        {
-                            orderInProgress.UpdatedDate = DateTime.Now;
-                            orderInProgress.InProgress = false;
-                            orderInProgress.CreationSuccess = true;
-                            orderInProgress.ErrorMessage = "";
-
-                            await sysproOrderCreationHistoryAppService
-                                .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
-                        }
+                        await CheckOrderSaveStatus(webDriver, orderInProgress);
                     }
                     else
                     {
@@ -711,7 +672,7 @@ namespace BA.OrderScraper.Helpers
                         //save order
                         await FillOrderHeader((IJavaScriptExecutor)webDriver, currentOrder);
                         webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
-                        await Task.Delay(10000);
+                        await CheckOrderSaveStatus(webDriver, orderInProgress, ex);
                     }
                 }
                 catch (Exception ex2)
@@ -747,6 +708,63 @@ namespace BA.OrderScraper.Helpers
                 await Task.Delay(1000);
 
                 #endregion
+            }
+        }
+
+        private static async Task CheckOrderSaveStatus(IWebDriver? webDriver, SysproOrderCreationHistory orderInProgress, Exception exception = null)
+        {
+            await Task.Delay(10000);
+            IWebElement row;
+            ReadOnlyCollection<IWebElement> rowGroup;
+            ReadOnlyCollection<IWebElement> gridListCellNotes = null;
+            try
+            {
+                webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(4);
+                gridListCellNotes = webDriver.FindElements(By.ClassName("gridlist-cell-note"));
+            }
+            catch (NotFoundException notFound)
+            {
+                //continue with work
+            }
+            if (gridListCellNotes?.Count > 0)
+            {
+                //means we potentially have an issue, get the message and log it instead
+                //use data-content attribute
+                var errorMessage = gridListCellNotes![0].GetAttribute("data-content");
+
+                orderInProgress.UpdatedDate = DateTime.Now;
+                orderInProgress.InProgress = false;
+                orderInProgress.ErrorMessage = errorMessage;
+
+                await sysproOrderCreationHistoryAppService
+                    .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
+                UpdateItemsRows(webDriver, 0, out row, out rowGroup);
+                //remove all rows so that we can create the next order
+                for (var i = 0; i < rowGroup.Count; i++)
+                {
+                    UpdateItemsRows(webDriver, 0, out row, out rowGroup);
+                    row.FindElements(By.TagName("td"))[0].FindElement(By.TagName("a")).Click();
+                    await Task.Delay(500);
+                }
+            }
+            else if (exception == null)
+            {
+                orderInProgress.UpdatedDate = DateTime.Now;
+                orderInProgress.InProgress = false;
+                orderInProgress.CreationSuccess = true;
+                orderInProgress.ErrorMessage = "";
+
+                await sysproOrderCreationHistoryAppService
+                    .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
+            }
+            else if (exception != null)
+            {
+                orderInProgress.UpdatedDate = DateTime.Now;
+                orderInProgress.InProgress = true;
+                orderInProgress.CreationSuccess = false;
+                orderInProgress.ErrorMessage = exception.Message;
+                await sysproOrderCreationHistoryAppService
+                    .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
             }
         }
 
@@ -900,7 +918,7 @@ namespace BA.OrderScraper.Helpers
                 }
                 catch (Exception ex)
                 {
-                    if (ex is ElementClickInterceptedException)
+                    if (ex is ElementClickInterceptedException || ex is NotFoundException)
                     {
                         //check if there is no stock popup, and click save if there is
                         try
