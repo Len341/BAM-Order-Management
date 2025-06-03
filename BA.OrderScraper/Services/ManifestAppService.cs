@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using OpenQA.Selenium.DevTools.V130.Debugger;
 
 namespace BA.OrderScraper.Services
 {

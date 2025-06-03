@@ -24,6 +24,8 @@ namespace BA.OrderScraper.Services
                     existingSysproOrderCreationHistory.ErrorMessage = sysproOrderCreationHistory.ErrorMessage;
                     existingSysproOrderCreationHistory.InProgress = sysproOrderCreationHistory.InProgress;
                     existingSysproOrderCreationHistory.OrderNumber = sysproOrderCreationHistory.OrderNumber;
+                    existingSysproOrderCreationHistory.OrderTotalItems = sysproOrderCreationHistory.OrderTotalItems;
+                    existingSysproOrderCreationHistory.OrderTotalItemsCompleted = sysproOrderCreationHistory.OrderTotalItemsCompleted;
                     existingSysproOrderCreationHistory.UpdatedDate = DateTime.Now;
                     await context.SaveChangesAsync();
                     return existingSysproOrderCreationHistory;

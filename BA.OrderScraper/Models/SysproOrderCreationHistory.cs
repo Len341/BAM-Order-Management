@@ -17,6 +17,8 @@ namespace BA.OrderScraper.Models
         public bool CreationSuccess { get; set; }
         public bool InProgress { get; set; }
         public string? OrderNumber { get; set; }
+        public int OrderTotalItems { get; set; }
+        public int OrderTotalItemsCompleted { get; set; }
         public string? ErrorMessage { get; set; }
         public DateTime UpdatedDate { get; set; } = DateTime.Now;
     }

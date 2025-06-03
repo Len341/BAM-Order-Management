@@ -3,6 +3,7 @@ using BA.OrderScraper.Models;
 using BA.OrderScraper.Shared;
 using OfficeOpenXml;
 using OpenQA.Selenium;
+using EFCore.BulkExtensions;
 using System.Configuration;
 using System.Data.Entity;
 using System.Globalization;
@@ -134,7 +135,7 @@ namespace BA.OrderScraper.Helpers
                     //open excel file and iterate through rows
                     using (var package = new ExcelPackage(new FileInfo(file)))
                     {
-                        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                        ExcelPackage.License.SetNonCommercialOrganization("BA Order Scraper");
                         var worksheet = package.Workbook.Worksheets[0];
                         for (int i = 2; i <= worksheet.Dimension.End.Row; i++)
                         {
@@ -173,7 +174,7 @@ namespace BA.OrderScraper.Helpers
                     //open excel file and iterate through rows
                     using (var package = new ExcelPackage(new FileInfo(file)))
                     {
-                        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                        ExcelPackage.License.SetNonCommercialOrganization("BA Order Scraper");
                         var worksheet = package.Workbook.Worksheets[0];
                         for (int i = 2; i <= worksheet.Dimension.End.Row; i++)
                         {
@@ -223,9 +224,8 @@ namespace BA.OrderScraper.Helpers
                         }
                     }
                     var dbContext = new BADbContext();
-                    await dbContext.StagingManifest.AddRangeAsync(manifests);
+                    await dbContext.BulkInsertOrUpdateAsync(manifests);
                     await dbContext.SaveChangesAsync();
-
                 }
                 else if (fileName.ToLower().Contains("skid"))
                 {
@@ -234,7 +234,7 @@ namespace BA.OrderScraper.Helpers
                     //open excel file and iterate through rows
                     using (var package = new ExcelPackage(new FileInfo(file)))
                     {
-                        ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                        ExcelPackage.License.SetNonCommercialOrganization("BA Order Scraper");
                         var worksheet = package.Workbook.Worksheets[0];
                         for (int i = 2; i <= worksheet.Dimension.End.Row; i++)
                         {

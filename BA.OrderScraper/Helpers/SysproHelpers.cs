@@ -55,7 +55,7 @@ namespace BA.OrderScraper.Helpers
                 //check for in progress orders
                 var inProgressOrders = (await sysproOrderCreationHistoryAppService
                     .GetSysproOrderCreationHistoryAsync(inProgress: true))
-                    .Take(5);
+                    .Take(3);
                 if (inProgressOrders != null && inProgressOrders.Any())
                 {
                     foreach (var inProgressOrder in inProgressOrders)
@@ -177,7 +177,9 @@ namespace BA.OrderScraper.Helpers
                                 ManifestNumber = sysproOrder.CustomerPurchaseOrder,
                                 InProgress = true,
                                 UpdatedDate = DateTime.Now,
-                                OrderNumber = orderNumber
+                                OrderNumber = orderNumber,
+                                OrderTotalItems = sysproOrder.Items.Count,
+                                OrderTotalItemsCompleted = 0
                             });
                     }
 
@@ -259,7 +261,26 @@ namespace BA.OrderScraper.Helpers
                         }
                         webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
 
-                        var warehouseText = warehouseInput.GetAttribute("value");
+                        string warehouseText = string.Empty;
+                        var warehouseStaleRetryCount = 0;
+                        while (warehouseStaleRetryCount < 10)
+                        {
+                            webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
+                            try { warehouseText = warehouseInput.GetAttribute("value"); break; }
+                            catch (StaleElementReferenceException)
+                            {
+                                UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                td5 = row.FindElements(By.TagName("td"))[4];
+                                warehouseInput = td5.FindElement(By.TagName("input"));
+                                warehouseStaleRetryCount++;
+                            }
+                            catch
+                            {
+                                throw;
+                            }
+                        }
+                        webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
+
                         while (warehouseText.Trim() == string.Empty)
                         {
                             try
@@ -540,6 +561,10 @@ namespace BA.OrderScraper.Helpers
                         jsExecutor.ExecuteScript($"document.querySelector('.k-scrollbar.k-scrollbar-vertical').scrollTo(0,{scrollDown})");
                         scrollDown += 28;
                         loopCount++;
+
+                        orderInProgress.OrderTotalItemsCompleted += 1;
+                        await sysproOrderCreationHistoryAppService
+                             .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
                     }
 
                     #endregion
@@ -987,6 +1012,7 @@ namespace BA.OrderScraper.Helpers
         }
         public static async Task LoginSysproAvantiPortal(IWebDriver webDriver)
         {
+            string companyToUse = ConfigurationManager.AppSettings["SysproAvantiPortalCompany"];
             webDriver.Navigate().GoToUrl(ConfigurationManager.AppSettings["SysproAvantiPortalUrl"]);
             var userNameInput = webDriver.FindElement(By.Id("UserName"));
             userNameInput.SendKeys(ConfigurationManager.AppSettings["SysproAvantiPortalUsername"]);
@@ -1009,7 +1035,7 @@ namespace BA.OrderScraper.Helpers
                 .GetAttribute("value");
 
             var checkCompCounter = 0;
-            while (companyText != "2 - BRACE ABLE")
+            while (companyText != companyToUse)
             {
                 await SelectLoginCompany(webDriver);
                 await Task.Delay(2000);
