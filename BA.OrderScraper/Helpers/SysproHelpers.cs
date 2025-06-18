@@ -281,23 +281,23 @@ namespace BA.OrderScraper.Helpers
                         }
                         webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
 
-                        while (warehouseText.Trim() == string.Empty)
-                        {
-                            try
-                            {
-                                warehouseInput.SendKeys("10");//use warehouse 10 as a constant for now: TODO
-                                await Task.Delay(200);
-                                warehouseText = warehouseInput.GetAttribute("value");
-                            }
-                            catch (Exception)
-                            {
-                                UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                                td5 = row.FindElements(By.TagName("td"))[4];
-                                ClickTd(webDriver, i, 4);
-                                warehouseInput = td5.FindElement(By.TagName("input"));
-                                warehouseText = warehouseInput.GetAttribute("value"); //stale element reference exception here ?
-                            }
-                        }
+                        //while (warehouseText.Trim() == string.Empty)
+                        //{
+                        //    try
+                        //    {
+                        //        warehouseInput.SendKeys("10");//use warehouse 10 as a constant for now: TODO
+                        //        await Task.Delay(200);
+                        //        warehouseText = warehouseInput.GetAttribute("value");
+                        //    }
+                        //    catch (Exception)
+                        //    {
+                        //        UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                        //        td5 = row.FindElements(By.TagName("td"))[4];
+                        //        ClickTd(webDriver, i, 4);
+                        //        warehouseInput = td5.FindElement(By.TagName("input"));
+                        //        warehouseText = warehouseInput.GetAttribute("value"); //stale element reference exception here ?
+                        //    }
+                        //}
 
                         UpdateItemsRows(webDriver, i, out row, out rowGroup);
                         var td6 = row.FindElements(By.TagName("td"))[5];
