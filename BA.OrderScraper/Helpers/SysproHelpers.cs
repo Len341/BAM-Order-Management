@@ -28,6 +28,8 @@ namespace BA.OrderScraper.Helpers
     {
         static SysproOrderCreationHistoryAppService sysproOrderCreationHistoryAppService = new SysproOrderCreationHistoryAppService();
         static ManifestAppService manifestAppService = new ManifestAppService();
+        static SysproAppService sysproAppService = new SysproAppService();
+
         public static async Task CreateSysproOrders(IWebDriver? webDriver)
         {
             var currentOrder = new SysproOrderItem();
@@ -61,11 +63,14 @@ namespace BA.OrderScraper.Helpers
                     foreach (var inProgressOrder in inProgressOrders)
                     {
                         var order = await manifestAppService.GetSysproOrderByManifestNo(inProgressOrder.ManifestNumber, true);
-                        order.OrderNumber = inProgressOrder.OrderNumber ?? "";
-                        orderItems.Add(order);
+                        if (order != null)
+                        {
+                            order.OrderNumber = inProgressOrder.OrderNumber ?? "";
+                            orderItems.Add(order);
+                        }
                     }
                 }
-                orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(5));
+                orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(4));
 
                 foreach (var sysproOrder in orderItems)
                 {
@@ -240,7 +245,15 @@ namespace BA.OrderScraper.Helpers
                         while (td5StaleRetryCount < 10)
                         {
                             webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(1);
-                            try { warehouseInput = td5.FindElement(By.TagName("input")); break; }
+                            try
+                            {
+                                ClickTd(webDriver, i, 4);
+                                warehouseInput = td5.FindElement(By.TagName("input"));
+                                //warehouseInput.SendKeys("");
+                                jsExecutor.ExecuteScript($"arguments[0].value = '';", warehouseInput);
+                                jsExecutor.ExecuteScript(Consts.JavaScript.baseScript + " triggerElementChange(arguments[0]);", warehouseInput);
+                                break;
+                            }
                             catch (StaleElementReferenceException)
                             {
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
@@ -281,24 +294,6 @@ namespace BA.OrderScraper.Helpers
                         }
                         webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
 
-                        //while (warehouseText.Trim() == string.Empty)
-                        //{
-                        //    try
-                        //    {
-                        //        warehouseInput.SendKeys("10");//use warehouse 10 as a constant for now: TODO
-                        //        await Task.Delay(200);
-                        //        warehouseText = warehouseInput.GetAttribute("value");
-                        //    }
-                        //    catch (Exception)
-                        //    {
-                        //        UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                        //        td5 = row.FindElements(By.TagName("td"))[4];
-                        //        ClickTd(webDriver, i, 4);
-                        //        warehouseInput = td5.FindElement(By.TagName("input"));
-                        //        warehouseText = warehouseInput.GetAttribute("value"); //stale element reference exception here ?
-                        //    }
-                        //}
-
                         UpdateItemsRows(webDriver, i, out row, out rowGroup);
                         var td6 = row.FindElements(By.TagName("td"))[5];
                         //actions.SendKeys(Keys.Tab).Perform();
@@ -326,7 +321,7 @@ namespace BA.OrderScraper.Helpers
                             catch (NoSuchElementException)
                             {
                                 ClickTd(webDriver, i, 5);
-                                await Task.Delay(1000);
+                                await Task.Delay(500);
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
                             }
                             catch
@@ -395,15 +390,32 @@ namespace BA.OrderScraper.Helpers
 
 
                             string warehouse = string.Empty;
+                            string stockCode = string.Empty;
                             string itemDescription = string.Empty;
 
                             int retryItemDetailsCount = 0;
+                            int warehouseRowIndex = 0;
                             while (true)
                             {
                                 try
                                 {
-                                    warehouse = rows[0].FindElements(By.TagName("td"))[1].GetAttribute("innerText");
-                                    itemDescription = rows[0].FindElements(By.TagName("td"))[3].GetAttribute("innerText").ToLower().Trim().Replace(" ", "");
+                                    stockCode = rows[0].FindElements(By.TagName("td"))[0].GetAttribute("innerText");
+
+                                    var invMaster = await sysproAppService.GetInvMasterByStockCodeAsync(stockCode);
+                                    var warehouseToUse = invMaster.WarehouseToUse;
+
+                                    foreach (var _row in rows)
+                                    {
+                                        warehouse = _row.FindElements(By.TagName("td"))[1].GetAttribute("innerText");
+                                        itemDescription = _row.FindElements(By.TagName("td"))[3].GetAttribute("innerText").ToLower().Trim().Replace(" ", "");
+
+                                        if (warehouse == warehouseToUse)
+                                        {
+                                            //we have the warehouse we need
+                                            break;
+                                        }
+                                        warehouseRowIndex++;
+                                    }
                                     break;
                                 }
                                 catch (Exception ex) when (ex is StaleElementReferenceException)
@@ -428,7 +440,7 @@ namespace BA.OrderScraper.Helpers
                                 try
                                 {
                                     wait.Timeout = TimeSpan.FromSeconds(10);
-                                    wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementToBeClickable(rows[0]));
+                                    wait.Until(SeleniumExtras.WaitHelpers.ExpectedConditions.ElementToBeClickable(rows[warehouseRowIndex]));
                                     break;
                                 }
                                 catch (Exception ex)
@@ -451,7 +463,7 @@ namespace BA.OrderScraper.Helpers
                             {
                                 try
                                 {
-                                    rows[0].Click();
+                                    rows[warehouseRowIndex].Click();
                                     await Task.Delay(1000);
                                     break;
                                 }
@@ -469,8 +481,45 @@ namespace BA.OrderScraper.Helpers
                                     throw new Exception("Could not click on search result item row");
                                 }
                             }
+
+                            await Task.Delay(500);
+                            int warehouseTextRetryCount = 0;
+                            while (warehouseText.Trim() != warehouse)
+                            {
+                                while (true)
+                                {
+                                    try
+                                    {
+                                        //warehouseInput.SendKeys(warehouse);
+                                        UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                        ClickTd(webDriver, i, 4);
+                                        await Task.Delay(500);
+                                        warehouseInput = row.FindElements(By.TagName("td"))[4].FindElement(By.TagName("input"));
+                                        jsExecutor.ExecuteScript($"arguments[0].value = '{warehouse}';", warehouseInput);
+                                        jsExecutor.ExecuteScript(Consts.JavaScript.baseScript + " triggerElementChange(arguments[0]);", warehouseInput);
+                                        await Task.Delay(500);
+                                        warehouseText = row.FindElements(By.TagName("td"))[4].FindElement(By.TagName("input")).GetAttribute("value");
+                                    }
+                                    catch (Exception)
+                                    {
+                                        warehouseTextRetryCount++;
+                                        if (warehouseTextRetryCount > 9)
+                                        {
+                                            throw new Exception("Correct warehouse could not be selected");
+                                        }
+                                        UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                        ClickTd(webDriver, i, 4);
+                                        await Task.Delay(500);
+                                        warehouseInput = row.FindElements(By.TagName("td"))[4].FindElement(By.TagName("input"));
+                                        warehouseText = warehouseInput.GetAttribute("value");
+                                        continue;
+                                    }
+                                    break;
+                                }
+                            }
+                            await Task.Delay(500);
                             actions.SendKeys(Keys.Tab).Perform();
-                            //await Task.Delay(1000);
+                            await Task.Delay(500);
                             //actions.SendKeys(Keys.Tab).Perform();
                             UpdateItemsRows(webDriver, i, out row, out rowGroup);
 
@@ -600,58 +649,7 @@ namespace BA.OrderScraper.Helpers
                     {
                         //only save the order if there are items in the order
                         //Save Order
-                        int retrySaveCount = 0;
-                        while (true)
-                        {
-                            try
-                            {
-                                webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
-                                break;
-                            }
-                            catch (Exception ex) when (ex is ElementClickInterceptedException)
-                            {
-                                await Task.Delay(500);
-                                retrySaveCount++;
-                                if (retrySaveCount > 10)
-                                {
-                                    throw;
-                                }
-                            }
-                        }
-
-
-                        for (var i = 0; i < contractExpiredPopupCount; i++)
-                        {
-                            try
-                            {
-                                //var closeExpiredContractPopupButton
-                                //await Task.Delay(2000);
-                                webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(3);
-                                var closeExpiredContractPopupButtons = webDriver.FindElements(
-                                    By.CssSelector("body > div.k-widget.k-window.k-dialog > div.k-window-titlebar.k-dialog-titlebar.k-header > div > a"));
-
-                                foreach (var elem in closeExpiredContractPopupButtons)
-                                {
-                                    var isHidden = (bool)jsExecutor.ExecuteScript("return (arguments[0].offsetParent === null)", elem);
-                                    if (!isHidden) elem.Click();
-                                }
-                            }
-                            catch (WebDriverTimeoutException timeout)
-                            {
-                                //continue with work
-                            }
-                            catch (NotFoundException notFound)
-                            {
-                                //continue with work
-                            }
-                        }
-                        #endregion
-
-                        rowGroup = webDriver
-                                .FindElement(By.XPath("//*[@id=\"main_column_0\"]/div[2]/div/div/div/div[2]/div/div[3]/div[1]/table/tbody"))
-                                .FindElements(By.TagName("tr"));
-
-                        await CheckOrderSaveStatus(webDriver, orderInProgress);
+                        await SaveOrder(webDriver, orderInProgress, contractExpiredPopupCount, jsExecutor);
                     }
                     else
                     {
@@ -696,8 +694,10 @@ namespace BA.OrderScraper.Helpers
                     {
                         //save order
                         await FillOrderHeader((IJavaScriptExecutor)webDriver, currentOrder);
-                        webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
-                        await CheckOrderSaveStatus(webDriver, orderInProgress, ex);
+                        //webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
+                        //await CheckOrderSaveStatus(webDriver, orderInProgress, ex);
+
+                        await SaveOrder(webDriver, orderInProgress, 0, jsExecutor: (IJavaScriptExecutor)webDriver, ex);
                     }
                 }
                 catch (Exception ex2)
@@ -736,16 +736,133 @@ namespace BA.OrderScraper.Helpers
             }
         }
 
+        private static async Task FixMissingWarehouses(
+            IWebDriver? webDriver,
+            IJavaScriptExecutor jsExecutor)
+        {
+            IWebElement row;
+            ReadOnlyCollection<IWebElement> rowGroup;
+            UpdateItemsRows(webDriver, 0, out row, out rowGroup);
+            //create a loop that scrolls through the rows and populates the warehouse input with the correct warehouse
+            for (var wc = 0; wc < rowGroup.Count; wc++)
+            {
+                int retryWarehouseSetCount = 0;
+                while (retryWarehouseSetCount < 10)
+                {
+                    try
+                    {
+                        UpdateItemsRows(webDriver, wc, out row, out rowGroup);
+                        var td5 = row.FindElements(By.TagName("td"))[4];
+
+                        if (td5.GetAttribute("innerText")?.Trim() == string.Empty)
+                        {
+                            ClickTd(webDriver, wc, 4);
+                            await Task.Delay(500);
+                            UpdateItemsRows(webDriver, wc, out row, out rowGroup);
+                            td5 = row.FindElements(By.TagName("td"))[4];
+                            var warehouseInput = td5.FindElement(By.TagName("input"));
+                            //we should set the warehouse to the default warehouse
+                            string stockCode = row.FindElements(By.TagName("td"))[5].GetAttribute("innerText");
+                            var invMaster = await sysproAppService.GetInvMasterByStockCodeAsync(stockCode);
+                            jsExecutor.ExecuteScript($"arguments[0].value = '{invMaster.WarehouseToUse}';", warehouseInput);
+                            jsExecutor.ExecuteScript(Consts.JavaScript.baseScript + " triggerElementChange(arguments[0]);", warehouseInput);
+                            await Task.Delay(250);
+                        }
+                    }
+                    catch (Exception ex) when (ex is StaleElementReferenceException || ex is NoSuchElementException)
+                    {
+                        //continue with work
+                        if (retryWarehouseSetCount > 10)
+                        {
+                            throw new Exception($"Could not set warehouse for row {wc}");
+                        }
+                    }
+                    catch
+                    {
+                        throw;
+                    }
+                    finally
+                    {
+                        retryWarehouseSetCount++;
+                    }
+                }
+            }
+        }
+
+        private static async Task SaveOrder(
+            IWebDriver? webDriver,
+            SysproOrderCreationHistory orderInProgress,
+            int contractExpiredPopupCount,
+            IJavaScriptExecutor jsExecutor,
+            Exception ex = null)
+        {
+            ReadOnlyCollection<IWebElement> rowGroup;
+            int retrySaveCount = 0;
+            while (true)
+            {
+                try
+                {
+                    webDriver.FindElement(By.Id("Toolbar.SORPOETB40123")).Click();
+                    break;
+                }
+                catch (Exception _ex) when (_ex is ElementClickInterceptedException)
+                {
+                    await Task.Delay(500);
+                    retrySaveCount++;
+                    if (retrySaveCount > 10)
+                    {
+                        throw;
+                    }
+                }
+            }
+
+
+            for (var i = 0; i < contractExpiredPopupCount; i++)
+            {
+                try
+                {
+                    //var closeExpiredContractPopupButton
+                    //await Task.Delay(2000);
+                    webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(3);
+                    var closeExpiredContractPopupButtons = webDriver.FindElements(
+                        By.CssSelector("body > div.k-widget.k-window.k-dialog > div.k-window-titlebar.k-dialog-titlebar.k-header > div > a"));
+
+                    foreach (var elem in closeExpiredContractPopupButtons)
+                    {
+                        var isHidden = (bool)jsExecutor.ExecuteScript("return (arguments[0].offsetParent === null)", elem);
+                        if (!isHidden) elem.Click();
+                    }
+                }
+                catch (WebDriverTimeoutException timeout)
+                {
+                    //continue with work
+                }
+                catch (NotFoundException notFound)
+                {
+                    //continue with work
+                }
+            }
+            #endregion
+
+            //rowGroup = webDriver
+            //        .FindElement(By.XPath("//*[@id=\"main_column_0\"]/div[2]/div/div/div/div[2]/div/div[3]/div[1]/table/tbody"))
+            //        .FindElements(By.TagName("tr"));
+
+            await CheckOrderSaveStatus(webDriver, orderInProgress, ex);
+        }
+
         private static async Task CheckOrderSaveStatus(IWebDriver? webDriver, SysproOrderCreationHistory orderInProgress, Exception exception = null)
         {
             await Task.Delay(10000);
             IWebElement row;
             ReadOnlyCollection<IWebElement> rowGroup;
             ReadOnlyCollection<IWebElement> gridListCellNotes = null;
+
             try
             {
                 webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(4);
                 gridListCellNotes = webDriver.FindElements(By.ClassName("gridlist-cell-note"));
+                UpdateItemsRows(webDriver, 0, out row, out rowGroup);
             }
             catch (NotFoundException notFound)
             {
@@ -757,19 +874,29 @@ namespace BA.OrderScraper.Helpers
                 //use data-content attribute
                 var errorMessage = gridListCellNotes![0].GetAttribute("data-content");
 
-                orderInProgress.UpdatedDate = DateTime.Now;
-                orderInProgress.InProgress = false;
-                orderInProgress.ErrorMessage = errorMessage;
-
-                await sysproOrderCreationHistoryAppService
-                    .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
-                UpdateItemsRows(webDriver, 0, out row, out rowGroup);
-                //remove all rows so that we can create the next order
-                for (var i = 0; i < rowGroup.Count; i++)
+                if (gridListCellNotes.Any(z => z.GetAttribute("data-content").ToLower() == "invalid warehouse"))
                 {
+                    //we have an invalid warehouse error, we should fix it
+                    await FixMissingWarehouses(webDriver, (IJavaScriptExecutor)webDriver);
+                    //we should retry saving the order
+                    await SaveOrder(webDriver, orderInProgress, 0, (IJavaScriptExecutor)webDriver);
+                }
+                else
+                {
+                    orderInProgress.UpdatedDate = DateTime.Now;
+                    orderInProgress.InProgress = false;
+                    orderInProgress.ErrorMessage = errorMessage;
+
+                    await sysproOrderCreationHistoryAppService
+                        .CreateOrUpdateSysproOrderCreationHistoryAsync(orderInProgress);
                     UpdateItemsRows(webDriver, 0, out row, out rowGroup);
-                    row.FindElements(By.TagName("td"))[0].FindElement(By.TagName("a")).Click();
-                    await Task.Delay(500);
+                    //remove all rows so that we can create the next order
+                    for (var i = 0; i < rowGroup.Count; i++)
+                    {
+                        UpdateItemsRows(webDriver, 0, out row, out rowGroup);
+                        row.FindElements(By.TagName("td"))[0].FindElement(By.TagName("a")).Click();
+                        await Task.Delay(500);
+                    }
                 }
             }
             else if (exception == null)
@@ -973,9 +1100,14 @@ namespace BA.OrderScraper.Helpers
                 rowGroup = webDriver
                                 .FindElement(By.XPath("//*[@id=\"main_column_0\"]/div[2]/div/div/div/div[2]/div/div[3]/div[1]/table/tbody"))
                                 .FindElements(By.TagName("tr"));
-                row = rowGroup[i];
+                row = null;
+                if (rowGroup.Count > 0) row = rowGroup[i];
             }
             catch (IndexOutOfRangeException outOfRange)
+            {
+                throw;
+            }
+            catch (ArgumentOutOfRangeException outOfRange)
             {
                 throw;
             }
@@ -1023,7 +1155,7 @@ namespace BA.OrderScraper.Helpers
 
             await Task.Delay(2000);
 
-            await SelectLoginCompany(webDriver);
+            await SelectLoginCompany(webDriver, 0);
 
             await Task.Delay(2000);
 
@@ -1037,7 +1169,7 @@ namespace BA.OrderScraper.Helpers
             var checkCompCounter = 0;
             while (companyText != companyToUse)
             {
-                await SelectLoginCompany(webDriver);
+                await SelectLoginCompany(webDriver, checkCompCounter + 1);
                 await Task.Delay(2000);
                 companyText = webDriver.FindElement(
                     By.CssSelector("#main_column_0 > div > div > form > div:nth-child(4) > div.col-xs-11.col-11.sys-pd-l-15 > span > span > input"))
@@ -1055,12 +1187,12 @@ namespace BA.OrderScraper.Helpers
             await Task.Delay(2000);
         }
 
-        private static async Task SelectLoginCompany(IWebDriver webDriver)
+        private static async Task SelectLoginCompany(IWebDriver webDriver, int itemNo)
         {
             webDriver.FindElement(By.CssSelector("#main_column_0 > div > div > form > div:nth-child(4) > div.col-xs-11.col-11.sys-pd-l-15 > span > span > span.k-select"));
             ((IJavaScriptExecutor)webDriver).ExecuteScript("document.querySelector('#main_column_0 > div > div > form > div:nth-child(4) > div.col-xs-11.col-11.sys-pd-l-15 > span > span > span.k-select').click()");
             await Task.Delay(2500);
-            ((IJavaScriptExecutor)webDriver).ExecuteScript("document.querySelectorAll('#CompId_listbox li')[1].click()");
+            ((IJavaScriptExecutor)webDriver).ExecuteScript($"document.querySelectorAll('#CompId_listbox li')[{itemNo}].click()");
         }
     }
 }

@@ -269,7 +269,8 @@ namespace BA.OrderScraper.Helpers
                 }
             }
 
-            var archivePath = Path.GetFullPath(ConfigurationManager.AppSettings["EdgeDriverPath"]) + "\\ToyotaArchive";
+            var archivePath = Path.GetFullPath(ConfigurationManager.AppSettings["EdgeDriverPath"]) +
+                $"\\{ConfigurationManager.AppSettings["Env"]}\\ToyotaArchive";
             GeneralHelpers.MoveFilesToArchive(files, archivePath);
             GeneralHelpers.CleanArchiveHistory(archivePath);
         }

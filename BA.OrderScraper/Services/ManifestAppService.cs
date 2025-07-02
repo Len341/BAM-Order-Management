@@ -30,8 +30,8 @@ namespace BA.OrderScraper.Services
                     .GroupBy(z => z.SupplierManifestNo);
 
                 ordersGroupedByManifestNo = ordersGroupedByManifestNo
-                    //.OrderBy(z => z.ToList().Count)
-                    .OrderByDescending(z => z.FirstOrDefault()?.ImportTime);
+                    .OrderByDescending(z => z.ToList().Count)
+                    .ThenByDescending(z => z.FirstOrDefault()?.ImportTime);
 
                 ordersGroupedByManifestNo.ForEach(ordersByManifestNo =>
                 {

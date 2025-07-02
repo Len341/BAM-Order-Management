@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using static BA.OrderScraper.Shared.Consts;
 using BA.OrderScraper.Shared;
 using BA.OrderScraper.Services;
+using Microsoft.IdentityModel.Tokens;
 
 int retryCount = int.Parse(ConfigurationManager.AppSettings["retryCount"]);
 int retries = 0;
@@ -34,11 +35,7 @@ async Task RunMain(string[] args)
                 await ToyotaPortalHelpers.ImportToyotaOrders(importType, webDriver);
                 break;
             case Consts.JobType.SysproOrderCreate:
-                if (await manifestAppService.HasPendingManifestsToCreate())
-                {
-                    await SysproHelpers.CreateSysproOrders(webDriver);
-                    QuitAndCloseAllWebdriverInstances(webDriver);
-                }
+                await RunSysproSalesOrderCreation(manifestAppService, webDriver);
                 break;
             default:
                 throw new Exception("Invalid job type");
@@ -68,6 +65,15 @@ async Task RunMain(string[] args)
     {
         Thread.Sleep(10000);
         QuitAndCloseAllWebdriverInstances(webDriver);
+    }
+
+    static async Task RunSysproSalesOrderCreation(ManifestAppService manifestAppService, IWebDriver webDriver)
+    {
+        while (await manifestAppService.HasPendingManifestsToCreate())
+        {
+            await SysproHelpers.CreateSysproOrders(webDriver);
+            QuitAndCloseAllWebdriverInstances(webDriver);
+        }
     }
 }
 
