@@ -58,14 +58,21 @@ async Task RunMain(string[] args)
         {
             retries++;
             QuitAndCloseAllWebdriverInstances(webDriver);
-            await RunMain(args);
+            //await RunMain(args);
+            var processName = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = processName,
+                Arguments = string.Join(" ", args),
+                UseShellExecute = true
+            });
+            Environment.Exit(0);
         }
     }
-    finally
-    {
-        Thread.Sleep(10000);
-        QuitAndCloseAllWebdriverInstances(webDriver);
-    }
+    //finally
+    //{
+    //    QuitAndCloseAllWebdriverInstances(webDriver);
+    //}
 
     static async Task RunSysproSalesOrderCreation(ManifestAppService manifestAppService, IWebDriver webDriver)
     {

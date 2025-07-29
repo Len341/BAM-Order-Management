@@ -9,6 +9,7 @@ namespace BA.OrderScraper.EFCore
     public class SysproDbContext : DbContext
     {
         public DbSet<InvMaster> InvMaster { get; set; }
+        public DbSet<SorMaster> SorMaster { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             optionsBuilder.UseSqlServer($@"Server={ConfigurationManager.AppSettings["SysproDatabaseServerName"]};Database={ConfigurationManager.AppSettings["SysproDatabaseName"]};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True");

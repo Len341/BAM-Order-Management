@@ -43,5 +43,34 @@ namespace BA.OrderScraper.Services
                 throw;
             }
         }
+        public async Task<List<SorMaster>> GetSorMasterListAsync()
+        {
+            try
+            {
+                using (var context = new SysproDbContext())
+                {
+                    var sorMasterList = await context.SorMaster.AsNoTracking().ToListAsync();
+                    return sorMasterList;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<bool> PurchaseOrderExists(string poNumber)
+        {
+            try
+            {
+                using (var context = new SysproDbContext())
+                {
+                    return await context.SorMaster.AnyAsync(z => z.CustomerPoNumber.Trim().ToLower() == poNumber.Trim().ToLower());
+                }
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
     }
 }

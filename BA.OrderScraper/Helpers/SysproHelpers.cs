@@ -43,7 +43,7 @@ namespace BA.OrderScraper.Helpers
                 WebDriverWait wait = new WebDriverWait(webDriver, TimeSpan.FromSeconds(30));
                 var jsExecutor = (IJavaScriptExecutor)webDriver;
 
-                await LoginSysproAvantiPortal(webDriver);
+                await LoginSysproAvantiPortal(webDriver, wait);
                 jsExecutor.ExecuteScript(Consts.JavaScript.baseScript);
                 await Task.Delay(5000);
                 await NavigateToExpressOrderEntry(wait, webDriver);
@@ -71,6 +71,11 @@ namespace BA.OrderScraper.Helpers
                     }
                 }
                 orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(4));
+
+                //add in a check to process only those orders that do NOT exist in Syspro
+                orderItems = orderItems
+                    .Where(x => !sysproAppService.PurchaseOrderExists(x.CustomerPurchaseOrder.ToString()).Result)
+                    .ToList();
 
                 foreach (var sysproOrder in orderItems)
                 {
@@ -1142,9 +1147,10 @@ namespace BA.OrderScraper.Helpers
             }
             return null;
         }
-        public static async Task LoginSysproAvantiPortal(IWebDriver webDriver)
+        public static async Task LoginSysproAvantiPortal(IWebDriver webDriver, WebDriverWait wait)
         {
             string companyToUse = ConfigurationManager.AppSettings["SysproAvantiPortalCompany"];
+            string companyToUsePassword = ConfigurationManager.AppSettings["SysproAvantiPortalCompanyPassword"];
             webDriver.Navigate().GoToUrl(ConfigurationManager.AppSettings["SysproAvantiPortalUrl"]);
             var userNameInput = webDriver.FindElement(By.Id("UserName"));
             userNameInput.SendKeys(ConfigurationManager.AppSettings["SysproAvantiPortalUsername"]);
@@ -1179,6 +1185,27 @@ namespace BA.OrderScraper.Helpers
                 {
                     throw new Exception("Could not select correct company");
                 }
+            }
+
+            if (!string.IsNullOrEmpty(companyToUsePassword))
+            {
+                await Task.Delay(250);
+                var companyPasswordInput = webDriver.FindElement(By.Id("CompPass"));
+                companyPasswordInput.SendKeys(companyToUsePassword);
+                await Task.Delay(250);
+                ((IJavaScriptExecutor)webDriver).ExecuteScript("document.getElementById('SignInBtn').click()");
+                //add a 5 second wait to see if the error message appears
+                await Task.Delay(2000);
+                var errorMessages = webDriver.FindElements(By.CssSelector("p.help-block.error-message"));
+                foreach (var errorMessage in errorMessages)
+                {
+                    var messageText = errorMessage.Text;
+                    if (messageText.ToLower().Contains("invalid company password"))
+                    {
+                        throw new Exception("Invalid company password");
+                    }
+                }
+
             }
 
             //webDriver.FindElement(By.Id("SignInBtn")).Click();
