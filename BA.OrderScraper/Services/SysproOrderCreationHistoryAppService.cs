@@ -13,7 +13,9 @@ namespace BA.OrderScraper.Services
 {
     public class SysproOrderCreationHistoryAppService
     {
-        public async Task<SysproOrderCreationHistory> CreateOrUpdateSysproOrderCreationHistoryAsync(Models.SysproOrderCreationHistory sysproOrderCreationHistory)
+        static SysproAppService _sysproAppService = new SysproAppService();
+        public async Task<SysproOrderCreationHistory> CreateOrUpdateSysproOrderCreationHistoryAsync(
+            Models.SysproOrderCreationHistory sysproOrderCreationHistory)
         {
             using (var context = new BADbContext())
             {
@@ -51,6 +53,7 @@ namespace BA.OrderScraper.Services
             bool? isComplete = null,
             bool? error = null)
         {
+            var existingPoNumbers = await _sysproAppService.ExistingPurchaseOrderNumbers();
             using (var context = new BADbContext())
             {
                 var predicate = PredicateBuilder.New<Models.SysproOrderCreationHistory>(x => true);
@@ -59,7 +62,11 @@ namespace BA.OrderScraper.Services
                 if (isComplete.HasValue) predicate = predicate.And(x => x.CreationSuccess == isComplete.Value);
                 if (error.HasValue) predicate = predicate.And(x => x.ErrorMessage != null && x.ErrorMessage.Trim() != string.Empty);
 
-                return context.SysproOrderCreationHistory.Where(predicate).ToList();
+
+                return context.SysproOrderCreationHistory
+                    .Where(predicate)
+                    .Where(z => !existingPoNumbers.Any(x => x == z.ManifestNumber.ToString()))
+                    .ToList();
             }
         }
 

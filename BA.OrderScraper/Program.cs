@@ -25,6 +25,7 @@ async Task RunMain(string[] args)
     IWebDriver? webDriver = GeneralHelpers.LaunchBrowser(ConfigurationManager.AppSettings["EdgeDriverPath"] ?? "");
     var jobType = args.Length > 0 ? args[0]?.ToLower() ?? "" : "";
     var importType = args.Length > 1 ? args[1]?.ToLower() ?? "" : "";
+    bool hadException = false;
     try
     {
         await GeneralHelpers.UpdateDatabaseAsync();
@@ -43,6 +44,7 @@ async Task RunMain(string[] args)
     }
     catch (Exception ex)
     {
+        hadException = true;
         var error = new Error(
             ex.Message,
             ex.StackTrace,
@@ -56,23 +58,21 @@ async Task RunMain(string[] args)
         }
         if (retries < retryCount)
         {
-            retries++;
-            QuitAndCloseAllWebdriverInstances(webDriver);
-            //await RunMain(args);
-            var processName = Process.GetCurrentProcess().MainModule?.FileName ?? "";
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = processName,
-                Arguments = string.Join(" ", args),
-                UseShellExecute = true
-            });
-            Environment.Exit(0);
+            RestartScraper(args, webDriver, 1);
         }
     }
-    //finally
-    //{
-    //    QuitAndCloseAllWebdriverInstances(webDriver);
-    //}
+    finally
+    {
+        if(hadException && retries < retryCount)
+        {
+            Console.WriteLine($"An error occurred: {retries + 1} retries attempted. Exiting application.");
+            RestartScraper(args, webDriver, 1);
+        }
+        else
+        {
+            QuitAndCloseAllWebdriverInstances(webDriver);
+        }
+    }
 
     static async Task RunSysproSalesOrderCreation(ManifestAppService manifestAppService, IWebDriver webDriver)
     {
@@ -80,7 +80,24 @@ async Task RunMain(string[] args)
         {
             await SysproHelpers.CreateSysproOrders(webDriver);
             QuitAndCloseAllWebdriverInstances(webDriver);
+            webDriver = GeneralHelpers.LaunchBrowser(ConfigurationManager.AppSettings["EdgeDriverPath"] ?? "");
         }
+        Console.WriteLine("All manifests processed. Exiting application.");
+    }
+
+    void RestartScraper(string[] args, IWebDriver webDriver, int exitCode = 0)
+    {
+        retries++;
+        QuitAndCloseAllWebdriverInstances(webDriver);
+        //await RunMain(args);
+        var processName = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = processName,
+            Arguments = string.Join(" ", args),
+            UseShellExecute = true
+        });
+        Environment.Exit(exitCode);
     }
 }
 

@@ -34,10 +34,19 @@ namespace BA.OrderScraper.Helpers
             }
             var options = new EdgeOptions();
             options.AddArgument("--start-maximized");
+            options.AddArgument("--disable-infobars");                     // Disable "Chrome is being controlled..."
+            options.AddArgument("--disable-extensions");                   // Disable extensions
+            options.AddArgument("--disable-popup-blocking");               // Disable popup blocking
+            //options.AddArgument("--no-sandbox");                           // Disable sandbox (can improve perf, but risky)
+            options.AddArgument("--disable-dev-shm-usage");                // Avoid shared memory issues (especially on Linux)
+            options.AddArgument("--disable-gpu");                          // Disable GPU hardware acceleration (for headless or low-resource)
+            options.AddArgument("--disable-background-networking");        // Reduce background network load
+            options.AddArgument("--disable-background-timer-throttling");  // Keep timers active
             //options.AddArgument("--headless");
-            //options.AddArgument("--disable-notifications");
+            options.AddArgument("--disable-notifications");
             //options.AddArgument("--disable-gpu");
-            options.AddArgument("inprivate");
+            //options.AddArgument("inprivate");
+
             var driver = new EdgeDriver(
                 EdgeDriverService
                 .CreateDefaultService(driverPath, "msedgedriver.exe"),

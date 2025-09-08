@@ -14,8 +14,11 @@ namespace BA.OrderScraper.Services
 {
     public class ManifestAppService
     {
+        private readonly SysproAppService _sysproAppService = new SysproAppService();
+
         public async Task<List<SysproOrderItem>> GetTopNManifestsToCreate(int n = 1)
         {
+            var existingPoNumbers = await _sysproAppService.ExistingPurchaseOrderNumbers();
             using (var context = new BADbContext())
             {
                 var sysproOrders = new List<SysproOrderItem>();
@@ -27,6 +30,7 @@ namespace BA.OrderScraper.Services
 
                 var ordersGroupedByManifestNo = (await context.StagingManifest.AsNoTracking().ToListAsync())
                     .Where(z => !z.SupplierPadEasyReferenceNumberNotFound)//filter out items if they could not previously be found
+                    .Where(z => !existingPoNumbers.Any(x => x == z.SupplierManifestNo.ToString()))
                     .GroupBy(z => z.SupplierManifestNo);
 
                 ordersGroupedByManifestNo = ordersGroupedByManifestNo
@@ -68,6 +72,7 @@ namespace BA.OrderScraper.Services
 
         public async Task<SysproOrderItem> GetNextManifestsToCreate()
         {
+            var existingPoNumbers = await _sysproAppService.ExistingPurchaseOrderNumbers();
             using (var context = new BADbContext())
             {
                 //create a PredicateBuilder
@@ -77,6 +82,7 @@ namespace BA.OrderScraper.Services
                     .ToListAsync();
 
                 var ordersGroupedByManifestNo = (await context.StagingManifest.AsNoTracking().ToListAsync())
+                    .Where(z => !existingPoNumbers.Any(x => x == z.SupplierManifestNo.ToString()))
                     .GroupBy(z => z.SupplierManifestNo);
 
                 ordersGroupedByManifestNo = ordersGroupedByManifestNo
@@ -176,6 +182,7 @@ namespace BA.OrderScraper.Services
         //create a method to see if there are any manifests to create
         public async Task<bool> HasPendingManifestsToCreate()
         {
+            var existingPoNumbers = await _sysproAppService.ExistingPurchaseOrderNumbers();
             using (var context = new BADbContext())
             {
                 try
@@ -183,9 +190,10 @@ namespace BA.OrderScraper.Services
                     var sysproManifestsHistory = await context.SysproOrderCreationHistory.AsNoTracking()
                         .ToListAsync();
 
-                    var ordersGroupedByManifestNo = (await context.StagingManifest.AsNoTracking()
+                    var ordersGroupedByManifestNo = ((await context.StagingManifest.AsNoTracking()
                         .OrderByDescending(z => z.ImportTime)
-                        .ToListAsync()
+                        .ToListAsync())
+                        .Where(z => !existingPoNumbers.Any(x => x == z.SupplierManifestNo.ToString()))
                         ).GroupBy(z => z.SupplierManifestNo);
                     return ordersGroupedByManifestNo.Any(ordersByManifestNo =>
                     {

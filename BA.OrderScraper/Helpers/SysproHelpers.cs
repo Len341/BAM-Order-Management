@@ -26,9 +26,9 @@ namespace BA.OrderScraper.Helpers
 {
     public static class SysproHelpers
     {
-        static SysproOrderCreationHistoryAppService sysproOrderCreationHistoryAppService = new SysproOrderCreationHistoryAppService();
         static ManifestAppService manifestAppService = new ManifestAppService();
         static SysproAppService sysproAppService = new SysproAppService();
+        static SysproOrderCreationHistoryAppService sysproOrderCreationHistoryAppService = new SysproOrderCreationHistoryAppService();
 
         public static async Task CreateSysproOrders(IWebDriver? webDriver)
         {
@@ -72,10 +72,6 @@ namespace BA.OrderScraper.Helpers
                 }
                 orderItems.AddRange(await manifestAppService.GetTopNManifestsToCreate(4));
 
-                //add in a check to process only those orders that do NOT exist in Syspro
-                orderItems = orderItems
-                    .Where(x => !sysproAppService.PurchaseOrderExists(x.CustomerPurchaseOrder.ToString()).Result)
-                    .ToList();
 
                 foreach (var sysproOrder in orderItems)
                 {
@@ -284,8 +280,12 @@ namespace BA.OrderScraper.Helpers
                         while (warehouseStaleRetryCount < 10)
                         {
                             webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
-                            try { warehouseText = warehouseInput.GetAttribute("value"); break; }
-                            catch (StaleElementReferenceException)
+                            try
+                            {
+                                warehouseText = warehouseInput.GetAttribute("value");
+                                break;
+                            }
+                            catch (Exception ex) when (ex is StaleElementReferenceException || ex is NullReferenceException)
                             {
                                 UpdateItemsRows(webDriver, i, out row, out rowGroup);
                                 td5 = row.FindElements(By.TagName("td"))[4];
@@ -296,6 +296,10 @@ namespace BA.OrderScraper.Helpers
                             {
                                 throw;
                             }
+                        }
+                        if(warehouseStaleRetryCount >= 10)
+                        {
+                            throw new Exception("Could not get warehouse input value");
                         }
                         webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
 
@@ -332,7 +336,8 @@ namespace BA.OrderScraper.Helpers
                             catch
                             {
                                 throw;
-                            };
+                            }
+                            ;
                             webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
                         }
                         //webDriver.FindElement(By.Id("Filter_AlternateKey1_InvMaster_0"));
@@ -489,8 +494,10 @@ namespace BA.OrderScraper.Helpers
 
                             await Task.Delay(500);
                             int warehouseTextRetryCount = 0;
+                            int warehouseTextNotMatchedRetry = 0;
                             while (warehouseText.Trim() != warehouse)
                             {
+                                warehouseTextNotMatchedRetry++;
                                 while (true)
                                 {
                                     try
@@ -508,18 +515,20 @@ namespace BA.OrderScraper.Helpers
                                     catch (Exception)
                                     {
                                         warehouseTextRetryCount++;
-                                        if (warehouseTextRetryCount > 9)
+                                        if (warehouseTextRetryCount > 10)
                                         {
                                             throw new Exception("Correct warehouse could not be selected");
                                         }
-                                        UpdateItemsRows(webDriver, i, out row, out rowGroup);
-                                        ClickTd(webDriver, i, 4);
                                         await Task.Delay(500);
-                                        warehouseInput = row.FindElements(By.TagName("td"))[4].FindElement(By.TagName("input"));
-                                        warehouseText = warehouseInput.GetAttribute("value");
+                                        //warehouseInput = row.FindElements(By.TagName("td"))[4].FindElement(By.TagName("input"));
+                                        //warehouseText = warehouseInput.GetAttribute("value");
                                         continue;
                                     }
                                     break;
+                                }
+                                if (warehouseTextNotMatchedRetry > 10)
+                                {
+                                    throw new Exception("Product description did not appear and automation could not continue");
                                 }
                             }
                             await Task.Delay(500);
@@ -562,9 +571,49 @@ namespace BA.OrderScraper.Helpers
                             }
 
                             UpdateItemsRows(webDriver, i, out row, out rowGroup);
+
+
                             var td8 = row.FindElements(By.TagName("td"))[8];
                             ClickTd(webDriver, i, 8);
-                            var qtyInput = td8.FindElements(By.TagName("input")).LastOrDefault();
+                            await Task.Delay(500);
+                            int td8RetryCount = 0;
+                            IWebElement qtyInput = null;
+                            while (true)
+                            {
+                                try
+                                {
+                                    qtyInput = td8.FindElements(By.TagName("input")).LastOrDefault();
+                                    break;
+                                }
+                                catch (StaleElementReferenceException)
+                                {
+                                    await Task.Delay(500);
+                                    UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                    td8 = row.FindElements(By.TagName("td"))[8];
+                                    td8RetryCount++;
+                                    if (td8RetryCount > 10)
+                                    {
+                                        throw new Exception("Could not set quantity for item, td8 is stale");
+                                    }
+                                }
+                                catch (NotFoundException)
+                                {
+                                    ClickTd(webDriver, i, 8);
+                                    await Task.Delay(500);
+                                    UpdateItemsRows(webDriver, i, out row, out rowGroup);
+                                    td8RetryCount++;
+                                    if (td8RetryCount > 10)
+                                    {
+                                        throw new Exception("Could not set quantity for item, cannot find qty input");
+                                    }
+                                }
+                                catch
+                                {
+                                    throw;
+                                }
+                            }
+
+
                             jsExecutor.ExecuteScript($"arguments[0].value = '{sysproOrder.Items[i].Quantity}';", qtyInput);
                             await Task.Delay(500);
                             UpdateItemsRows(webDriver, i, out row, out rowGroup);
@@ -711,7 +760,7 @@ namespace BA.OrderScraper.Helpers
                 }
                 finally
                 {
-                    webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
+                    //webDriver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
                 }
                 throw;
             }

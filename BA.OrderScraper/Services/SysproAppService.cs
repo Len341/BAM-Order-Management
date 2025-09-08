@@ -72,5 +72,19 @@ namespace BA.OrderScraper.Services
                 throw;
             }
         }
+        public async Task<List<string>> ExistingPurchaseOrderNumbers()
+        {
+            try
+            {
+                using (var context = new SysproDbContext())
+                {
+                    return await context.SorMaster.Select(z => z.CustomerPoNumber.Trim().ToLower()).ToListAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
     }
 }
